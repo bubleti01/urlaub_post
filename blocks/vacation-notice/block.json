@@ -1,0 +1,28 @@
+{
+  "apiVersion": 2,
+  "name": "urlaub-post/vacation-notice",
+  "title": "Urlaub Hinweis",
+  "category": "widgets",
+  "icon": "calendar-alt",
+  "description": "Zeigt aktive Urlaubshinweise dynamisch an.",
+  "textdomain": "urlaub_post",
+  "editorScript": "file:./index.js",
+  "attributes": {
+    "showImage": {
+      "type": "boolean",
+      "default": true
+    },
+    "showDates": {
+      "type": "boolean",
+      "default": true
+    },
+    "limit": {
+      "type": "number",
+      "default": 0
+    },
+    "id": {
+      "type": "number",
+      "default": 0
+    }
+  }
+}
