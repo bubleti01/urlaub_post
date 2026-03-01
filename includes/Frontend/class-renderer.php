@@ -10,11 +10,11 @@ class Renderer
 {
     public static function init(): void
     {
-        add_shortcode('urlaub', [__CLASS__, 'shortcode']);
-        add_shortcode('vacation_notice', [__CLASS__, 'shortcode']);
+        add_shortcode('urlaub', [__CLASS__, 'shortcode_urlaub']);
+        add_shortcode('vacation_notice', [__CLASS__, 'shortcode_vacation_notice']);
     }
 
-    public static function shortcode(array $atts = []): string
+    public static function shortcode_urlaub(array $atts = []): string
     {
         $atts = shortcode_atts([
             'show_image' => '1',
@@ -23,32 +23,51 @@ class Renderer
             'id' => '0',
         ], $atts, 'urlaub');
 
-        return self::render([
+        $args = [
             'show_image' => $atts['show_image'] !== '0',
             'show_dates' => $atts['show_dates'] !== '0',
             'limit' => max(0, (int) $atts['limit']),
             'id' => max(0, (int) $atts['id']),
-        ]);
+        ];
+
+        $items = self::get_active_items($args['id'], $args['limit']);
+
+        return self::render_full($items, $args);
+    }
+
+    public static function shortcode_vacation_notice(array $atts = []): string
+    {
+        $atts = shortcode_atts([
+            'limit' => '0',
+            'id' => '0',
+        ], $atts, 'vacation_notice');
+
+        $args = [
+            'limit' => max(0, (int) $atts['limit']),
+            'id' => max(0, (int) $atts['id']),
+        ];
+
+        $items = self::get_active_items($args['id'], $args['limit']);
+
+        return self::render_compact($items);
     }
 
     public static function render_block(array $attributes = []): string
     {
-        return self::render([
+        $args = [
             'show_image' => isset($attributes['showImage']) ? (bool) $attributes['showImage'] : true,
             'show_dates' => isset($attributes['showDates']) ? (bool) $attributes['showDates'] : true,
             'limit' => isset($attributes['limit']) ? max(0, (int) $attributes['limit']) : 0,
             'id' => isset($attributes['id']) ? max(0, (int) $attributes['id']) : 0,
-        ]);
+        ];
+
+        $items = self::get_active_items($args['id'], $args['limit']);
+
+        return self::render_full($items, $args);
     }
 
-    private static function render(array $args): string
+    private static function render_full(array $items, array $args): string
     {
-        $items = self::get_active_items($args['id']);
-
-        if ($args['limit'] > 0) {
-            $items = array_slice($items, 0, $args['limit']);
-        }
-
         if ($items === []) {
             return '';
         }
@@ -88,7 +107,40 @@ class Renderer
         return (string) ob_get_clean();
     }
 
-    private static function get_active_items(int $id = 0): array
+    private static function render_compact(array $items): string
+    {
+        if ($items === []) {
+            return '';
+        }
+
+        ob_start();
+        foreach ($items as $post) {
+            $von = (string) get_post_meta($post->ID, 'von_datum', true);
+            $bis = (string) get_post_meta($post->ID, 'bis_datum', true);
+            $von_out = self::format_date_de($von);
+            $bis_out = self::format_date_de($bis);
+            ?>
+            <div class="urlaub-post-notice vacation-notice">
+                <div class="vacation-title"><?php echo esc_html(get_the_title($post)); ?></div>
+                <div class="vacation-dates">
+                    <?php
+                    echo esc_html(
+                        sprintf(
+                            __('vom %1$s bis %2$s', URLAUB_POST_TEXTDOMAIN),
+                            $von_out,
+                            $bis_out
+                        )
+                    );
+                    ?>
+                </div>
+            </div>
+            <?php
+        }
+
+        return (string) ob_get_clean();
+    }
+
+    private static function get_active_items(int $id = 0, int $limit = 0): array
     {
         $query_args = [
             'post_type' => 'urlaub_post',
@@ -135,9 +187,12 @@ class Renderer
             }
         }
 
+        if ($limit > 0) {
+            $matches = array_slice($matches, 0, $limit);
+        }
+
         return $matches;
     }
-
 
     private static function format_date_de(string $ymd): string
     {
