@@ -57,6 +57,8 @@ class Renderer
         foreach ($items as $post) {
             $von = (string) get_post_meta($post->ID, 'von_datum', true);
             $bis = (string) get_post_meta($post->ID, 'bis_datum', true);
+            $von_out = self::format_date_de($von);
+            $bis_out = self::format_date_de($bis);
             ?>
             <div class="urlaub-post-notice">
                 <h3><?php echo esc_html(get_the_title($post)); ?></h3>
@@ -66,8 +68,8 @@ class Renderer
                         echo esc_html(
                             sprintf(
                                 __('von %1$s bis %2$s', URLAUB_POST_TEXTDOMAIN),
-                                $von,
-                                $bis
+                                $von_out,
+                                $bis_out
                             )
                         );
                         ?>
@@ -120,7 +122,6 @@ class Renderer
         foreach ($query->posts as $post) {
             $von = (string) get_post_meta($post->ID, 'von_datum', true);
             $bis = (string) get_post_meta($post->ID, 'bis_datum', true);
-
             if (! self::is_valid_date($von) || ! self::is_valid_date($bis) || $von > $bis) {
                 continue;
             }
@@ -135,6 +136,19 @@ class Renderer
         }
 
         return $matches;
+    }
+
+
+    private static function format_date_de(string $ymd): string
+    {
+        $ymd = trim($ymd);
+
+        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $ymd, wp_timezone());
+        if (! $dt || $dt->format('Y-m-d') !== $ymd) {
+            return $ymd;
+        }
+
+        return wp_date('d.m.Y', $dt->getTimestamp(), $dt->getTimezone());
     }
 
     private static function is_valid_date(string $date): bool
