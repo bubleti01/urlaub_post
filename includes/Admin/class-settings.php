@@ -58,14 +58,6 @@ class Settings
             },
         ]);
 
-        register_setting('urlaub_post_settings', 'urlaub_post_oh_name_source', [
-            'type' => 'string',
-            'default' => 'generated',
-            'sanitize_callback' => static function ($value): string {
-                $value = sanitize_text_field((string) $value);
-                return in_array($value, ['generated', 'urlaub_titel'], true) ? $value : 'generated';
-            },
-        ]);
     }
 
     public static function render_page(): void
@@ -77,7 +69,6 @@ class Settings
         $pre_days = (int) get_option('urlaub_post_pre_days', 0);
         $oh_enabled = Exporter::is_opening_hours_active() ? (bool) get_option('urlaub_post_oh_export_enabled', false) : false;
         $set_id = (int) get_option('urlaub_post_oh_set_id', 0);
-        $name_source = (string) get_option('urlaub_post_oh_name_source', 'generated');
         $sets = Exporter::get_opening_hour_sets();
         ?>
         <div class="wrap">
@@ -113,15 +104,6 @@ class Settings
                                     <?php foreach ($sets as $id => $label) : ?>
                                         <option value="<?php echo esc_attr((string) $id); ?>" <?php selected((int) $id, $set_id); ?>><?php echo esc_html($label); ?></option>
                                     <?php endforeach; ?>
-                                </select>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row"><label for="urlaub_post_oh_name_source"><?php esc_html_e('Holiday-Name Quelle', URLAUB_POST_TEXTDOMAIN); ?></label></th>
-                            <td>
-                                <select id="urlaub_post_oh_name_source" name="urlaub_post_oh_name_source">
-                                    <option value="generated" <?php selected($name_source, 'generated'); ?>><?php esc_html_e('Generated (post_title)', URLAUB_POST_TEXTDOMAIN); ?></option>
-                                    <option value="urlaub_titel" <?php selected($name_source, 'urlaub_titel'); ?>><?php esc_html_e('urlaub_titel', URLAUB_POST_TEXTDOMAIN); ?></option>
                                 </select>
                             </td>
                         </tr>

@@ -53,7 +53,6 @@ class Exporter
         }
 
         $root_post = self::resolve_root_set($target_post);
-        $name_source = (string) get_option('urlaub_post_oh_name_source', 'generated');
 
         $vacations = self::load_active_vacations();
         $holidays = [];
@@ -65,9 +64,7 @@ class Exporter
                 continue;
             }
 
-            $name = $name_source === 'urlaub_titel'
-                ? (string) get_post_meta($vacation->ID, 'urlaub_titel', true)
-                : get_the_title($vacation);
+            $name = get_the_title($vacation);
 
             if ($name === '') {
                 $name = __('Urlaub', URLAUB_POST_TEXTDOMAIN);

@@ -16,6 +16,7 @@ class CPT
         add_action('add_meta_boxes', [__CLASS__, 'add_metaboxes']);
         add_action('save_post_' . self::POST_TYPE, [__CLASS__, 'save_meta'], 10, 2);
         add_filter('default_title', [__CLASS__, 'default_title'], 10, 2);
+        add_filter('wp_insert_post_data', [__CLASS__, 'set_automatic_slug'], 10, 2);
 
         add_filter('manage_' . self::POST_TYPE . '_posts_columns', [__CLASS__, 'columns']);
         add_action('manage_' . self::POST_TYPE . '_posts_custom_column', [__CLASS__, 'column_content'], 10, 2);
@@ -68,18 +69,17 @@ class CPT
     {
         wp_nonce_field('urlaub_post_save_meta', 'urlaub_post_meta_nonce');
 
-        $von_datum   = (string) get_post_meta($post->ID, 'von_datum', true);
-        $bis_datum   = (string) get_post_meta($post->ID, 'bis_datum', true);
-        $urlaub_titel = (string) get_post_meta($post->ID, 'urlaub_titel', true);
-        $title_mode  = (string) get_post_meta($post->ID, 'title_mode', true);
-        $active      = get_post_meta($post->ID, 'active', true);
-
-        if ($title_mode !== 'manual') {
-            $title_mode = 'auto';
-        }
+        $von_datum = (string) get_post_meta($post->ID, 'von_datum', true);
+        $bis_datum = (string) get_post_meta($post->ID, 'bis_datum', true);
+        $active = get_post_meta($post->ID, 'active', true);
 
         if ($active === '') {
             $active = '1';
+        }
+
+        $slug_preview = '';
+        if ($von_datum !== '' && $bis_datum !== '') {
+            $slug_preview = self::build_slug($post->post_title, $von_datum, $bis_datum);
         }
         ?>
         <p>
@@ -91,22 +91,17 @@ class CPT
             <input type="date" id="bis_datum" name="bis_datum" value="<?php echo esc_attr($bis_datum); ?>" required>
         </p>
         <p>
-            <label for="urlaub_titel"><strong><?php esc_html_e('Titel', URLAUB_POST_TEXTDOMAIN); ?></strong></label><br>
-            <input type="text" id="urlaub_titel" name="urlaub_titel" class="widefat" value="<?php echo esc_attr($urlaub_titel); ?>">
-        </p>
-        <p>
-            <label for="title_mode"><strong><?php esc_html_e('Titelform', URLAUB_POST_TEXTDOMAIN); ?></strong></label><br>
-            <select id="title_mode" name="title_mode">
-                <option value="auto" <?php selected($title_mode, 'auto'); ?>><?php esc_html_e('Auto', URLAUB_POST_TEXTDOMAIN); ?></option>
-                <option value="manual" <?php selected($title_mode, 'manual'); ?>><?php esc_html_e('Manuell', URLAUB_POST_TEXTDOMAIN); ?></option>
-            </select>
-        </p>
-        <p>
             <label>
                 <input type="checkbox" name="active" value="1" <?php checked((string) $active, '1'); ?>>
                 <?php esc_html_e('Aktiv', URLAUB_POST_TEXTDOMAIN); ?>
             </label>
         </p>
+        <?php if ($slug_preview !== '') : ?>
+            <p>
+                <strong><?php esc_html_e('Permalink Vorschau:', URLAUB_POST_TEXTDOMAIN); ?></strong>
+                <code><?php echo esc_html($slug_preview); ?></code>
+            </p>
+        <?php endif; ?>
         <?php
     }
 
@@ -137,30 +132,53 @@ class CPT
             return;
         }
 
-        $urlaub_titel = isset($_POST['urlaub_titel']) ? sanitize_text_field(wp_unslash($_POST['urlaub_titel'])) : '';
-        $title_mode = isset($_POST['title_mode']) ? sanitize_text_field(wp_unslash($_POST['title_mode'])) : 'auto';
-        $title_mode = $title_mode === 'manual' ? 'manual' : 'auto';
         $active = isset($_POST['active']) ? '1' : '0';
 
         update_post_meta($post_id, 'von_datum', $von);
         update_post_meta($post_id, 'bis_datum', $bis);
-        update_post_meta($post_id, 'urlaub_titel', $urlaub_titel);
-        update_post_meta($post_id, 'title_mode', $title_mode);
         update_post_meta($post_id, 'active', $active);
+    }
 
-        if ($title_mode === 'auto') {
-            $suffix = $urlaub_titel !== '' ? $urlaub_titel : __('Urlaub', URLAUB_POST_TEXTDOMAIN);
-            $new_title = sprintf('Urlaub-vom-%s-bis-%s-%s', $von, $bis, $suffix);
-
-            if ($post->post_title !== $new_title) {
-                remove_action('save_post_' . self::POST_TYPE, [__CLASS__, 'save_meta'], 10);
-                wp_update_post([
-                    'ID' => $post_id,
-                    'post_title' => $new_title,
-                ]);
-                add_action('save_post_' . self::POST_TYPE, [__CLASS__, 'save_meta'], 10, 2);
-            }
+    public static function set_automatic_slug(array $data, array $postarr): array
+    {
+        if (($data['post_type'] ?? '') !== self::POST_TYPE) {
+            return $data;
         }
+
+        if ((defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) || wp_is_post_revision((int) ($postarr['ID'] ?? 0))) {
+            return $data;
+        }
+
+        $post_id = isset($postarr['ID']) ? (int) $postarr['ID'] : 0;
+
+        $von = isset($_POST['von_datum'])
+            ? self::sanitize_date(wp_unslash($_POST['von_datum']))
+            : self::sanitize_date((string) get_post_meta($post_id, 'von_datum', true));
+
+        $bis = isset($_POST['bis_datum'])
+            ? self::sanitize_date(wp_unslash($_POST['bis_datum']))
+            : self::sanitize_date((string) get_post_meta($post_id, 'bis_datum', true));
+
+        if ($von === '' || $bis === '' || $von > $bis) {
+            return $data;
+        }
+
+        $slug = self::build_slug((string) ($data['post_title'] ?? ''), $von, $bis);
+        if ($slug === '') {
+            return $data;
+        }
+
+        $unique_slug = wp_unique_post_slug(
+            $slug,
+            $post_id,
+            (string) ($data['post_status'] ?? 'publish'),
+            self::POST_TYPE,
+            (int) ($postarr['post_parent'] ?? 0)
+        );
+
+        $data['post_name'] = $unique_slug;
+
+        return $data;
     }
 
     public static function default_title(string $title, \WP_Post $post): string
@@ -169,7 +187,7 @@ class CPT
             return $title;
         }
 
-        return __('Urlaubstitel (wird bei Auto überschrieben)', URLAUB_POST_TEXTDOMAIN);
+        return __('Urlaubstitel', URLAUB_POST_TEXTDOMAIN);
     }
 
     public static function columns(array $columns): array
@@ -218,6 +236,14 @@ class CPT
             $query->set('meta_key', $orderby);
             $query->set('orderby', 'meta_value');
         }
+    }
+
+    private static function build_slug(string $post_title, string $von, string $bis): string
+    {
+        $base = sanitize_title($post_title);
+        $slug_raw = $base . '-vom-' . $von . '-bis-' . $bis;
+
+        return sanitize_title($slug_raw);
     }
 
     private static function sanitize_date(string $value): string
