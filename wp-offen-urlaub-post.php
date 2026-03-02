@@ -3,7 +3,7 @@
  * Plugin Name: WP Urlaub Post
  * Plugin URI: https://igo2web.com/de/wordpress-plugins-von-igw-design/wp-urlaub-post
  * Description: Erstellen/Verwalten Sie Urlaubszeiten Posts in WordPress und zeigen Sie diese in vielen verschiedenen Widgets und Shortcodes an.
- * Version: 1.0.1
+ * Version: 1.0.3
  * Requires at least: 6.0
  * Author: IGW Design
  * Author URI: https://igo2web.com
@@ -13,6 +13,25 @@
 
 if (! defined('ABSPATH')) {
     exit;
+}
+
+
+if (! function_exists('igw_urlaub_post_format_date_de')) {
+    function igw_urlaub_post_format_date_de(string $ymd): string
+    {
+        $ymd = trim($ymd);
+        if ($ymd === '') {
+            return '';
+        }
+
+        $dt = date_create_immutable($ymd);
+        if ($dt === false) {
+            return '';
+        }
+
+        $timestamp = $dt->getTimestamp();
+        return wp_date('d.m.Y', $timestamp);
+    }
 }
 
 final class IGW_WP_Urlaub_Post_Plugin
@@ -308,12 +327,18 @@ final class IGW_WP_Urlaub_Post_Plugin
         $html = '<div class="igw-urlaub-post-list igw-urlaub-post-list--' . esc_attr($mode) . '">';
 
         foreach ($posts as $post) {
-            $von = self::format_date_for_display((string) get_post_meta($post->ID, self::META_VON, true));
-            $bis = self::format_date_for_display((string) get_post_meta($post->ID, self::META_BIS, true));
+            $von = igw_urlaub_post_format_date_de((string) get_post_meta($post->ID, self::META_VON, true));
+            $bis = igw_urlaub_post_format_date_de((string) get_post_meta($post->ID, self::META_BIS, true));
+
+            $date_line = sprintf(
+                esc_html__('vom %1$s bis %2$s', 'igw_wp_urlaub_post'),
+                esc_html($von),
+                esc_html($bis)
+            );
 
             $html .= '<article class="igw-urlaub-post-item">';
             $html .= '<h3 class="igw-urlaub-post-item__title"><a href="' . esc_url(get_permalink($post)) . '">' . esc_html(get_the_title($post)) . '</a></h3>';
-            $html .= '<p class="igw-urlaub-post-item__dates">' . esc_html($von . ' - ' . $bis) . '</p>';
+            $html .= '<p class="igw-urlaub-post-item__dates">' . $date_line . '</p>';
 
             if ($mode === 'full') {
                 if (has_post_thumbnail($post)) {
@@ -635,12 +660,7 @@ final class IGW_WP_Urlaub_Post_Plugin
             return '';
         }
 
-        $timestamp = strtotime($normalized . ' 00:00:00');
-        if ($timestamp === false) {
-            return '';
-        }
-
-        return wp_date('d.m.Y', $timestamp);
+        return igw_urlaub_post_format_date_de($normalized);
     }
 }
 
