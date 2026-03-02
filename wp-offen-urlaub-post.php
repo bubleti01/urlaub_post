@@ -7,7 +7,7 @@
  * Requires at least: 6.0
  * Author: IGW Design
  * Author URI: https://igo2web.com
- * Text Domain: urlaub_post
+ * Text Domain: igw_wp_urlaub_post
  * Domain Path: /languages
  */
 
@@ -15,18 +15,19 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
-final class Urlaub_Post_Plugin
+final class IGW_WP_Urlaub_Post_Plugin
 {
     private const POST_TYPE = 'urlaub_post';
     private const META_VON = 'von_datum';
     private const META_BIS = 'bis_datum';
     private const META_ACTIVE = 'active';
-    private const OPT_PRE_DAYS = 'urlaub_post_pre_days';
-    private const OPT_OPENING_SET_ID = 'urlaub_post_opening_set_id';
-    private const OPT_MIGRATION_DONE = 'urlaub_post_migration_done';
+
+    private const OPT_PRE_DAYS = 'igw_wp_urlaub_post_pre_days';
+    private const OPT_MIGRATION_DONE = 'igw_wp_urlaub_post_migration_done';
 
     public static function init(): void
     {
+        add_action('init', [__CLASS__, 'load_textdomain']);
         add_action('init', [__CLASS__, 'register_post_type']);
         add_action('init', [__CLASS__, 'register_meta']);
         add_action('init', [__CLASS__, 'register_shortcodes']);
@@ -44,10 +45,10 @@ final class Urlaub_Post_Plugin
 
         add_action('admin_menu', [__CLASS__, 'register_settings_page']);
         add_action('admin_init', [__CLASS__, 'register_settings']);
-
-        add_action('admin_post_urlaub_post_export_opening_hours', [__CLASS__, 'handle_opening_hours_export']);
-
         add_action('admin_init', [__CLASS__, 'maybe_migrate_legacy_data']);
+        add_action('admin_post_igw_wp_urlaub_post_export_ferien', [__CLASS__, 'handle_export_ferien']);
+
+        add_filter('template_include', [__CLASS__, 'single_template_override']);
     }
 
     public static function activate(): void
@@ -61,74 +62,74 @@ final class Urlaub_Post_Plugin
         flush_rewrite_rules();
     }
 
+    public static function load_textdomain(): void
+    {
+        load_plugin_textdomain('igw_wp_urlaub_post', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    }
+
     public static function register_post_type(): void
     {
-        $labels = [
-            'name' => __('Urlaube', 'urlaub_post'),
-            'singular_name' => __('Urlaub', 'urlaub_post'),
-            'menu_name' => __('Urlaub', 'urlaub_post'),
-            'name_admin_bar' => __('Urlaub', 'urlaub_post'),
-            'add_new' => __('Neu hinzufügen', 'urlaub_post'),
-            'add_new_item' => __('Urlaub hinzufügen', 'urlaub_post'),
-            'new_item' => __('Neuer Urlaub', 'urlaub_post'),
-            'edit_item' => __('Urlaub bearbeiten', 'urlaub_post'),
-            'view_item' => __('Urlaub ansehen', 'urlaub_post'),
-            'all_items' => __('Alle Urlaube', 'urlaub_post'),
-            'search_items' => __('Urlaube durchsuchen', 'urlaub_post'),
-            'not_found' => __('Keine Urlaube gefunden.', 'urlaub_post'),
-            'not_found_in_trash' => __('Keine Urlaube im Papierkorb gefunden.', 'urlaub_post'),
-        ];
-
-        register_post_type(
-            self::POST_TYPE,
-            [
-                'labels' => $labels,
-                'public' => true,
-                'show_ui' => true,
-                'show_in_menu' => true,
-                'show_in_rest' => true,
-                'has_archive' => true,
-                'rewrite' => ['slug' => 'urlaub'],
-                'supports' => ['title', 'editor', 'thumbnail', 'excerpt', 'revisions'],
-                'taxonomies' => ['category', 'post_tag'],
-                'menu_icon' => 'dashicons-calendar-alt',
-            ]
-        );
+        register_post_type(self::POST_TYPE, [
+            'labels' => [
+                'name' => __('Urlaube', 'igw_wp_urlaub_post'),
+                'singular_name' => __('Urlaub', 'igw_wp_urlaub_post'),
+                'menu_name' => __('Urlaub', 'igw_wp_urlaub_post'),
+                'add_new' => __('Neu hinzufügen', 'igw_wp_urlaub_post'),
+                'add_new_item' => __('Urlaub hinzufügen', 'igw_wp_urlaub_post'),
+                'edit_item' => __('Urlaub bearbeiten', 'igw_wp_urlaub_post'),
+                'new_item' => __('Neuer Urlaub', 'igw_wp_urlaub_post'),
+                'view_item' => __('Urlaub ansehen', 'igw_wp_urlaub_post'),
+                'all_items' => __('Alle Urlaube', 'igw_wp_urlaub_post'),
+                'search_items' => __('Urlaube durchsuchen', 'igw_wp_urlaub_post'),
+            ],
+            'public' => true,
+            'show_ui' => true,
+            'show_in_menu' => true,
+            'show_in_rest' => true,
+            'has_archive' => true,
+            'rewrite' => ['slug' => 'urlaub'],
+            'supports' => ['title', 'editor', 'thumbnail', 'excerpt', 'revisions', 'author'],
+            'taxonomies' => ['category', 'post_tag'],
+            'menu_icon' => 'dashicons-calendar-alt',
+        ]);
     }
 
     public static function register_meta(): void
     {
-        $meta_args = [
+        register_post_meta(self::POST_TYPE, self::META_VON, [
             'type' => 'string',
             'single' => true,
             'show_in_rest' => true,
             'auth_callback' => static function () {
                 return current_user_can('edit_posts');
             },
-        ];
+        ]);
 
-        register_post_meta(self::POST_TYPE, self::META_VON, $meta_args);
-        register_post_meta(self::POST_TYPE, self::META_BIS, $meta_args);
-        register_post_meta(
-            self::POST_TYPE,
-            self::META_ACTIVE,
-            [
-                'type' => 'integer',
-                'single' => true,
-                'show_in_rest' => true,
-                'default' => 1,
-                'auth_callback' => static function () {
-                    return current_user_can('edit_posts');
-                },
-            ]
-        );
+        register_post_meta(self::POST_TYPE, self::META_BIS, [
+            'type' => 'string',
+            'single' => true,
+            'show_in_rest' => true,
+            'auth_callback' => static function () {
+                return current_user_can('edit_posts');
+            },
+        ]);
+
+        register_post_meta(self::POST_TYPE, self::META_ACTIVE, [
+            'type' => 'integer',
+            'single' => true,
+            'default' => 1,
+            'show_in_rest' => true,
+            'auth_callback' => static function () {
+                return current_user_can('edit_posts');
+            },
+        ]);
     }
 
     public static function add_meta_boxes(): void
     {
         add_meta_box(
-            'urlaub_post_dates',
-            __('Urlaubszeitraum', 'urlaub_post'),
+            'igw_wp_urlaub_post_dates',
+            __('Urlaubszeitraum', 'igw_wp_urlaub_post'),
             [__CLASS__, 'render_dates_meta_box'],
             self::POST_TYPE,
             'side',
@@ -138,34 +139,28 @@ final class Urlaub_Post_Plugin
 
     public static function render_dates_meta_box(\WP_Post $post): void
     {
-        wp_nonce_field('urlaub_post_dates_meta', 'urlaub_post_dates_meta_nonce');
+        wp_nonce_field('igw_wp_urlaub_post_dates_meta', 'igw_wp_urlaub_post_dates_meta_nonce');
 
         $von = (string) get_post_meta($post->ID, self::META_VON, true);
         $bis = (string) get_post_meta($post->ID, self::META_BIS, true);
         $active = (int) get_post_meta($post->ID, self::META_ACTIVE, true);
-        if ($active !== 0) {
-            $active = 1;
-        }
 
-        echo '<p><label for="urlaub_post_von"><strong>' . esc_html__('Von', 'urlaub_post') . '</strong></label><br />';
-        echo '<input type="date" id="urlaub_post_von" name="urlaub_post_von" value="' . esc_attr($von) . '" style="width:100%;" /></p>';
+        echo '<p><label for="igw_wp_urlaub_post_von"><strong>' . esc_html__('Von', 'igw_wp_urlaub_post') . '</strong></label><br />';
+        echo '<input type="date" id="igw_wp_urlaub_post_von" name="igw_wp_urlaub_post_von" value="' . esc_attr($von) . '" style="width:100%;" /></p>';
 
-        echo '<p><label for="urlaub_post_bis"><strong>' . esc_html__('Bis', 'urlaub_post') . '</strong></label><br />';
-        echo '<input type="date" id="urlaub_post_bis" name="urlaub_post_bis" value="' . esc_attr($bis) . '" style="width:100%;" /></p>';
+        echo '<p><label for="igw_wp_urlaub_post_bis"><strong>' . esc_html__('Bis', 'igw_wp_urlaub_post') . '</strong></label><br />';
+        echo '<input type="date" id="igw_wp_urlaub_post_bis" name="igw_wp_urlaub_post_bis" value="' . esc_attr($bis) . '" style="width:100%;" /></p>';
 
-        echo '<p><label>';
-        echo '<input type="checkbox" name="urlaub_post_active" value="1" ' . checked($active, 1, false) . ' /> ';
-        echo esc_html__('Aktiv', 'urlaub_post');
-        echo '</label></p>';
+        echo '<p><label><input type="checkbox" name="igw_wp_urlaub_post_active" value="1" ' . checked($active !== 0 ? 1 : 0, 1, false) . ' /> ' . esc_html__('Aktiv', 'igw_wp_urlaub_post') . '</label></p>';
     }
 
     public static function save_meta_boxes(int $post_id): void
     {
-        if (! isset($_POST['urlaub_post_dates_meta_nonce'])) {
+        if (! isset($_POST['igw_wp_urlaub_post_dates_meta_nonce'])) {
             return;
         }
 
-        if (! wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['urlaub_post_dates_meta_nonce'])), 'urlaub_post_dates_meta')) {
+        if (! wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['igw_wp_urlaub_post_dates_meta_nonce'])), 'igw_wp_urlaub_post_dates_meta')) {
             return;
         }
 
@@ -177,9 +172,9 @@ final class Urlaub_Post_Plugin
             return;
         }
 
-        $von = isset($_POST['urlaub_post_von']) ? sanitize_text_field(wp_unslash($_POST['urlaub_post_von'])) : '';
-        $bis = isset($_POST['urlaub_post_bis']) ? sanitize_text_field(wp_unslash($_POST['urlaub_post_bis'])) : '';
-        $active = isset($_POST['urlaub_post_active']) ? 1 : 0;
+        $von = isset($_POST['igw_wp_urlaub_post_von']) ? sanitize_text_field(wp_unslash($_POST['igw_wp_urlaub_post_von'])) : '';
+        $bis = isset($_POST['igw_wp_urlaub_post_bis']) ? sanitize_text_field(wp_unslash($_POST['igw_wp_urlaub_post_bis'])) : '';
+        $active = isset($_POST['igw_wp_urlaub_post_active']) ? 1 : 0;
 
         update_post_meta($post_id, self::META_VON, self::normalize_date($von));
         update_post_meta($post_id, self::META_BIS, self::normalize_date($bis));
@@ -192,36 +187,22 @@ final class Urlaub_Post_Plugin
             return $data;
         }
 
-        $post_status = $data['post_status'] ?? '';
-        if (in_array($post_status, ['auto-draft', 'inherit'], true)) {
+        $title = (string) ($data['post_title'] ?? '');
+        $status = (string) ($data['post_status'] ?? '');
+
+        if ($title === '' || in_array($status, ['auto-draft', 'inherit'], true)) {
             return $data;
         }
 
-        $title = $data['post_title'] ?? '';
-        if ($title === '') {
-            return $data;
-        }
+        $von = isset($_POST['igw_wp_urlaub_post_von']) ? self::normalize_date(sanitize_text_field(wp_unslash($_POST['igw_wp_urlaub_post_von']))) : '';
+        $bis = isset($_POST['igw_wp_urlaub_post_bis']) ? self::normalize_date(sanitize_text_field(wp_unslash($_POST['igw_wp_urlaub_post_bis']))) : '';
 
-        $von = '';
-        $bis = '';
-
-        if (isset($_POST['urlaub_post_von'])) {
-            $von = self::normalize_date(sanitize_text_field(wp_unslash($_POST['urlaub_post_von'])));
+        $post_id = isset($postarr['ID']) ? (int) $postarr['ID'] : 0;
+        if ($von === '' && $post_id > 0) {
+            $von = self::normalize_date((string) get_post_meta($post_id, self::META_VON, true));
         }
-        if (isset($_POST['urlaub_post_bis'])) {
-            $bis = self::normalize_date(sanitize_text_field(wp_unslash($_POST['urlaub_post_bis'])));
-        }
-
-        if ($von === '' || $bis === '') {
-            $post_id = isset($postarr['ID']) ? (int) $postarr['ID'] : 0;
-            if ($post_id > 0) {
-                if ($von === '') {
-                    $von = self::normalize_date((string) get_post_meta($post_id, self::META_VON, true));
-                }
-                if ($bis === '') {
-                    $bis = self::normalize_date((string) get_post_meta($post_id, self::META_BIS, true));
-                }
-            }
+        if ($bis === '' && $post_id > 0) {
+            $bis = self::normalize_date((string) get_post_meta($post_id, self::META_BIS, true));
         }
 
         if ($von === '' || $bis === '') {
@@ -229,30 +210,20 @@ final class Urlaub_Post_Plugin
         }
 
         $base_slug = sanitize_title($title . '-vom-' . $von . '-bis-' . $bis);
-        $post_id = isset($postarr['ID']) ? (int) $postarr['ID'] : 0;
-        $parent_id = isset($postarr['post_parent']) ? (int) $postarr['post_parent'] : 0;
-
-        $data['post_name'] = wp_unique_post_slug(
-            $base_slug,
-            $post_id,
-            $post_status,
-            self::POST_TYPE,
-            $parent_id
-        );
+        $data['post_name'] = wp_unique_post_slug($base_slug, $post_id, $status, self::POST_TYPE, (int) ($postarr['post_parent'] ?? 0));
 
         return $data;
     }
 
     public static function columns(array $columns): array
     {
-        $new = [];
-        $new['cb'] = $columns['cb'] ?? '<input type="checkbox" />';
-        $new['title'] = __('Titel', 'urlaub_post');
-        $new['von_datum'] = __('Von', 'urlaub_post');
-        $new['bis_datum'] = __('Bis', 'urlaub_post');
-        $new['date'] = $columns['date'] ?? __('Datum', 'urlaub_post');
-
-        return $new;
+        return [
+            'cb' => $columns['cb'] ?? '<input type="checkbox" />',
+            'title' => __('Titel', 'igw_wp_urlaub_post'),
+            'von_datum' => __('Von', 'igw_wp_urlaub_post'),
+            'bis_datum' => __('Bis', 'igw_wp_urlaub_post'),
+            'date' => $columns['date'] ?? __('Datum', 'igw_wp_urlaub_post'),
+        ];
     }
 
     public static function render_column(string $column, int $post_id): void
@@ -276,11 +247,7 @@ final class Urlaub_Post_Plugin
 
     public static function handle_columns_sort(\WP_Query $query): void
     {
-        if (! is_admin() || ! $query->is_main_query()) {
-            return;
-        }
-
-        if (($query->get('post_type') ?? '') !== self::POST_TYPE) {
+        if (! is_admin() || ! $query->is_main_query() || $query->get('post_type') !== self::POST_TYPE) {
             return;
         }
 
@@ -293,16 +260,16 @@ final class Urlaub_Post_Plugin
 
     public static function register_shortcodes(): void
     {
-        add_shortcode('urlaub', [__CLASS__, 'shortcode_urlaub']);
-        add_shortcode('vacation_notice', [__CLASS__, 'shortcode_vacation_notice']);
+        add_shortcode('igw_urlaub', [__CLASS__, 'shortcode_full']);
+        add_shortcode('igw_vacation_notice', [__CLASS__, 'shortcode_compact']);
     }
 
-    public static function shortcode_urlaub(array $atts = []): string
+    public static function shortcode_full(array $atts = []): string
     {
         return self::render_notices('full', $atts);
     }
 
-    public static function shortcode_vacation_notice(array $atts = []): string
+    public static function shortcode_compact(array $atts = []): string
     {
         return self::render_notices('compact', $atts);
     }
@@ -310,78 +277,64 @@ final class Urlaub_Post_Plugin
     public static function register_block(): void
     {
         wp_register_script(
-            'urlaub-post-block-editor',
+            'igw-wp-urlaub-post-block-editor',
             plugins_url('assets/block.js', __FILE__),
-            ['wp-blocks', 'wp-element', 'wp-components', 'wp-i18n', 'wp-block-editor'],
-            self::plugin_version(),
+            ['wp-blocks', 'wp-element', 'wp-i18n'],
+            '1.0.1',
             true
         );
 
-        register_block_type('urlaub-post/notice', [
+        register_block_type('igw-wp-urlaub-post/urlaub', [
             'api_version' => 2,
-            'editor_script' => 'urlaub-post-block-editor',
-            'render_callback' => [__CLASS__, 'render_block'],
-            'attributes' => [
-                'view' => [
-                    'type' => 'string',
-                    'default' => 'full',
-                ],
-            ],
+            'editor_script' => 'igw-wp-urlaub-post-block-editor',
+            'render_callback' => [__CLASS__, 'render_full_block'],
         ]);
     }
 
-    public static function render_block(array $attributes): string
+    public static function render_full_block(): string
     {
-        $view = isset($attributes['view']) && $attributes['view'] === 'compact' ? 'compact' : 'full';
-        return self::render_notices($view, []);
+        return self::shortcode_full([]);
     }
 
-    private static function render_notices(string $view, array $atts): string
+    private static function render_notices(string $mode, array $atts): string
     {
-        $defaults = [
-            'limit' => 10,
-        ];
-
-        $atts = shortcode_atts($defaults, $atts);
-        $limit = max(1, (int) $atts['limit']);
-
-        $posts = self::query_active_holidays($limit);
+        $atts = shortcode_atts(['limit' => 10], $atts);
+        $posts = self::query_active_holidays(max(1, (int) $atts['limit']));
 
         if ($posts === []) {
             return '';
         }
 
-        $out = '<div class="urlaub-post-notices urlaub-post-notices--' . esc_attr($view) . '">';
+        $html = '<div class="igw-urlaub-post-list igw-urlaub-post-list--' . esc_attr($mode) . '">';
 
         foreach ($posts as $post) {
             $von = self::format_date_for_display((string) get_post_meta($post->ID, self::META_VON, true));
             $bis = self::format_date_for_display((string) get_post_meta($post->ID, self::META_BIS, true));
 
-            $out .= '<article class="urlaub-post-item">';
-            $out .= '<h3 class="urlaub-post-item__title"><a href="' . esc_url(get_permalink($post)) . '">' . esc_html(get_the_title($post)) . '</a></h3>';
-            $out .= '<p class="urlaub-post-item__date">' . esc_html($von . ' - ' . $bis) . '</p>';
+            $html .= '<article class="igw-urlaub-post-item">';
+            $html .= '<h3 class="igw-urlaub-post-item__title"><a href="' . esc_url(get_permalink($post)) . '">' . esc_html(get_the_title($post)) . '</a></h3>';
+            $html .= '<p class="igw-urlaub-post-item__dates">' . esc_html($von . ' - ' . $bis) . '</p>';
 
-            if ($view === 'full') {
+            if ($mode === 'full') {
                 if (has_post_thumbnail($post)) {
-                    $out .= '<div class="urlaub-post-item__thumb">' . get_the_post_thumbnail($post, 'medium') . '</div>';
+                    $html .= '<div class="igw-urlaub-post-item__image">' . get_the_post_thumbnail($post, 'medium') . '</div>';
                 }
-                $content = apply_filters('the_content', (string) $post->post_content);
-                $out .= '<div class="urlaub-post-item__content">' . $content . '</div>';
+                $html .= '<div class="igw-urlaub-post-item__content">' . apply_filters('the_content', (string) $post->post_content) . '</div>';
             }
 
-            $out .= '</article>';
+            $html .= '</article>';
         }
 
-        $out .= '</div>';
+        $html .= '</div>';
 
-        return $out;
+        return $html;
     }
 
-    private static function query_active_holidays(int $limit = 10): array
+    private static function query_active_holidays(int $limit): array
     {
         $today = wp_date('Y-m-d');
         $pre_days = max(0, (int) get_option(self::OPT_PRE_DAYS, 0));
-        $start = wp_date('Y-m-d', strtotime('-' . $pre_days . ' days', strtotime($today)));
+        $until = wp_date('Y-m-d', strtotime('+' . $pre_days . ' days', strtotime($today)));
 
         $query = new \WP_Query([
             'post_type' => self::POST_TYPE,
@@ -399,15 +352,15 @@ final class Urlaub_Post_Plugin
                     'type' => 'NUMERIC',
                 ],
                 [
-                    'key' => self::META_BIS,
-                    'value' => $start,
-                    'compare' => '>=',
+                    'key' => self::META_VON,
+                    'value' => $until,
+                    'compare' => '<=',
                     'type' => 'DATE',
                 ],
                 [
-                    'key' => self::META_VON,
+                    'key' => self::META_BIS,
                     'value' => $today,
-                    'compare' => '<=',
+                    'compare' => '>=',
                     'type' => 'DATE',
                 ],
             ],
@@ -419,28 +372,22 @@ final class Urlaub_Post_Plugin
     public static function register_settings_page(): void
     {
         add_options_page(
-            __('Urlaub Post Einstellungen', 'urlaub_post'),
-            __('Urlaub Post', 'urlaub_post'),
+            __('Urlaub Post Einstellungen', 'igw_wp_urlaub_post'),
+            __('Urlaub Post', 'igw_wp_urlaub_post'),
             'manage_options',
-            'urlaub-post-settings',
+            'igw-wp-urlaub-post-settings',
             [__CLASS__, 'render_settings_page']
         );
     }
 
     public static function register_settings(): void
     {
-        register_setting('urlaub_post_settings', self::OPT_PRE_DAYS, [
+        register_setting('igw_wp_urlaub_post_settings', self::OPT_PRE_DAYS, [
             'type' => 'integer',
             'sanitize_callback' => static function ($value) {
                 return max(0, (int) $value);
             },
             'default' => 0,
-        ]);
-
-        register_setting('urlaub_post_settings', self::OPT_OPENING_SET_ID, [
-            'type' => 'string',
-            'sanitize_callback' => 'sanitize_text_field',
-            'default' => '',
         ]);
     }
 
@@ -450,119 +397,55 @@ final class Urlaub_Post_Plugin
             return;
         }
 
-        $set_id = (string) get_option(self::OPT_OPENING_SET_ID, '');
-
-        echo '<div class="wrap">';
-        echo '<h1>' . esc_html__('Urlaub Post Einstellungen', 'urlaub_post') . '</h1>';
-
-        settings_errors('urlaub_post_messages');
+        echo '<div class="wrap"><h1>' . esc_html__('Urlaub Post Einstellungen', 'igw_wp_urlaub_post') . '</h1>';
 
         echo '<form method="post" action="options.php">';
-        settings_fields('urlaub_post_settings');
-        echo '<table class="form-table" role="presentation">';
-
-        echo '<tr>';
-        echo '<th scope="row"><label for="' . esc_attr(self::OPT_PRE_DAYS) . '">' . esc_html__('Pre-Days', 'urlaub_post') . '</label></th>';
-        echo '<td><input name="' . esc_attr(self::OPT_PRE_DAYS) . '" type="number" min="0" id="' . esc_attr(self::OPT_PRE_DAYS) . '" value="' . esc_attr((string) get_option(self::OPT_PRE_DAYS, 0)) . '" class="small-text" />';
-        echo '<p class="description">' . esc_html__('Tage vor Startdatum, ab denen ein Urlaub bereits angezeigt wird.', 'urlaub_post') . '</p></td>';
-        echo '</tr>';
-
-        echo '<tr>';
-        echo '<th scope="row"><label for="' . esc_attr(self::OPT_OPENING_SET_ID) . '">' . esc_html__('WP-Opening-Hours Set-ID', 'urlaub_post') . '</label></th>';
-        echo '<td><input name="' . esc_attr(self::OPT_OPENING_SET_ID) . '" type="text" id="' . esc_attr(self::OPT_OPENING_SET_ID) . '" value="' . esc_attr($set_id) . '" class="regular-text" /></td>';
-        echo '</tr>';
-
-        echo '</table>';
+        settings_fields('igw_wp_urlaub_post_settings');
+        echo '<table class="form-table"><tr>';
+        echo '<th scope="row"><label for="' . esc_attr(self::OPT_PRE_DAYS) . '">' . esc_html__('Veröffentlichen bevor von_datum (nummer)', 'igw_wp_urlaub_post') . '</label></th>';
+        echo '<td><input type="number" min="0" class="small-text" id="' . esc_attr(self::OPT_PRE_DAYS) . '" name="' . esc_attr(self::OPT_PRE_DAYS) . '" value="' . esc_attr((string) get_option(self::OPT_PRE_DAYS, 0)) . '" /></td>';
+        echo '</tr></table>';
         submit_button();
         echo '</form>';
 
-        echo '<hr />';
-        echo '<h2>' . esc_html__('Export zu WP-Opening-Hours', 'urlaub_post') . '</h2>';
-        echo '<p>' . esc_html__('Exportiert alle aktiven veröffentlichten Urlaubsposts und überschreibt Holidays im gewählten Set.', 'urlaub_post') . '</p>';
+        echo '<hr /><h2>' . esc_html__('Export zu WP Plugin Öffnungszeiten', 'igw_wp_urlaub_post') . '</h2>';
+        echo '<p>' . esc_html__('Schreibt alle aktiven Urlaubsposts in „Ferien (Neue)“ des Plugins igw_wp_open_zeit.', 'igw_wp_urlaub_post') . '</p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="urlaub_post_export_opening_hours" />';
-        wp_nonce_field('urlaub_post_export_opening_hours', 'urlaub_post_export_nonce');
-        submit_button(__('Jetzt exportieren', 'urlaub_post'), 'secondary', 'submit', false);
-        echo '</form>';
-
-        echo '</div>';
+        echo '<input type="hidden" name="action" value="igw_wp_urlaub_post_export_ferien" />';
+        wp_nonce_field('igw_wp_urlaub_post_export_ferien', 'igw_wp_urlaub_post_export_nonce');
+        submit_button(__('Ferien exportieren', 'igw_wp_urlaub_post'), 'secondary', 'submit', false);
+        echo '</form></div>';
     }
 
-    public static function handle_opening_hours_export(): void
+    public static function handle_export_ferien(): void
     {
         if (! current_user_can('manage_options')) {
-            wp_die(esc_html__('Keine Berechtigung.', 'urlaub_post'));
+            wp_die(esc_html__('Keine Berechtigung.', 'igw_wp_urlaub_post'));
         }
 
-        check_admin_referer('urlaub_post_export_opening_hours', 'urlaub_post_export_nonce');
+        check_admin_referer('igw_wp_urlaub_post_export_ferien', 'igw_wp_urlaub_post_export_nonce');
 
-        $set_id = (string) get_option(self::OPT_OPENING_SET_ID, '');
-        $result = self::export_to_opening_hours($set_id);
+        $rows = self::build_export_rows();
 
-        if ($result['ok']) {
-            add_settings_error('urlaub_post_messages', 'urlaub_post_export_ok', $result['message'], 'updated');
-        } else {
-            add_settings_error('urlaub_post_messages', 'urlaub_post_export_fail', $result['message'], 'error');
+        if (! function_exists('igw_wp_open_zeit_upsert_ferien')) {
+            wp_die(esc_html__('Integration nicht verfügbar: Funktion igw_wp_open_zeit_upsert_ferien() fehlt.', 'igw_wp_urlaub_post'));
         }
 
-        set_transient('settings_errors', get_settings_errors(), 30);
+        igw_wp_open_zeit_upsert_ferien($rows, [
+            'source' => 'igw_wp_urlaub_post',
+            'mode' => 'replace',
+        ]);
 
-        wp_safe_redirect(admin_url('options-general.php?page=urlaub-post-settings'));
+        wp_safe_redirect(admin_url('options-general.php?page=igw-wp-urlaub-post-settings'));
         exit;
     }
 
-    private static function export_to_opening_hours(string $set_id): array
-    {
-        if ($set_id === '') {
-            return ['ok' => false, 'message' => __('Set-ID fehlt.', 'urlaub_post')];
-        }
-
-        if (! class_exists('WP_Opening_Hours')) {
-            return ['ok' => false, 'message' => __('WP-Opening-Hours nicht gefunden.', 'urlaub_post')];
-        }
-
-        $holidays = [];
-        $posts = self::query_all_active_holidays();
-
-        foreach ($posts as $post) {
-            $von = self::normalize_date((string) get_post_meta($post->ID, self::META_VON, true));
-            $bis = self::normalize_date((string) get_post_meta($post->ID, self::META_BIS, true));
-            if ($von === '' || $bis === '') {
-                continue;
-            }
-
-            $holidays[] = [
-                'start' => $von,
-                'end' => $bis,
-                'label' => get_the_title($post),
-            ];
-        }
-
-        if (function_exists('wp_opening_hours_set_holidays')) {
-            wp_opening_hours_set_holidays($set_id, $holidays);
-            return ['ok' => true, 'message' => __('Export erfolgreich abgeschlossen.', 'urlaub_post')];
-        }
-
-        if (class_exists('WP_Opening_Hours_Holiday_Manager') && method_exists('WP_Opening_Hours_Holiday_Manager', 'replace_holidays')) {
-            \WP_Opening_Hours_Holiday_Manager::replace_holidays($set_id, $holidays);
-            return ['ok' => true, 'message' => __('Export erfolgreich abgeschlossen.', 'urlaub_post')];
-        }
-
-        return [
-            'ok' => false,
-            'message' => __('Keine kompatible Export-Schnittstelle in WP-Opening-Hours gefunden.', 'urlaub_post'),
-        ];
-    }
-
-    private static function query_all_active_holidays(): array
+    private static function build_export_rows(): array
     {
         $query = new \WP_Query([
             'post_type' => self::POST_TYPE,
             'post_status' => 'publish',
             'posts_per_page' => -1,
-            'orderby' => 'meta_value',
-            'meta_key' => self::META_VON,
-            'order' => 'ASC',
             'meta_query' => [
                 [
                     'key' => self::META_ACTIVE,
@@ -573,122 +456,94 @@ final class Urlaub_Post_Plugin
             ],
         ]);
 
-        return $query->posts;
+        $rows = [];
+        foreach ($query->posts as $post) {
+            $von = self::normalize_date((string) get_post_meta($post->ID, self::META_VON, true));
+            $bis = self::normalize_date((string) get_post_meta($post->ID, self::META_BIS, true));
+            if ($von === '' || $bis === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'Name' => get_the_title($post),
+                'Start' => $von,
+                'Ende' => $bis,
+            ];
+        }
+
+        return $rows;
     }
 
     public static function maybe_migrate_legacy_data(): void
     {
-        if ((int) get_option(self::OPT_MIGRATION_DONE, 0) === 1) {
+        if ((int) get_option(self::OPT_MIGRATION_DONE, 0) === 1 || ! current_user_can('manage_options')) {
             return;
         }
 
-        if (! current_user_can('manage_options')) {
-            return;
-        }
+        $legacy_options = ['urlaub_post_entries', 'wp_offen_urlaub_post_entries', 'urlaub_entries'];
 
-        $legacy_rows = self::load_legacy_rows();
-        foreach ($legacy_rows as $row) {
-            self::migrate_legacy_row($row);
-        }
+        foreach ($legacy_options as $option_name) {
+            $rows = get_option($option_name, []);
+            if (! is_array($rows)) {
+                continue;
+            }
 
-        update_option(self::OPT_MIGRATION_DONE, 1, false);
-    }
-
-    private static function load_legacy_rows(): array
-    {
-        $rows = [];
-
-        $candidates = [
-            'urlaub_post_entries',
-            'wp_offen_urlaub_post_entries',
-            'urlaub_entries',
-        ];
-
-        foreach ($candidates as $option_name) {
-            $value = get_option($option_name, null);
-            if (is_array($value) && $value !== []) {
-                $rows = array_merge($rows, $value);
+            foreach ($rows as $row) {
+                self::migrate_legacy_row(is_array($row) ? $row : []);
             }
         }
 
-        /**
-         * Ermöglicht externen Code, Legacy-Einträge für die Migration zu liefern.
-         *
-         * @param array<int, array<string, mixed>> $rows
-         */
-        return apply_filters('urlaub_post_legacy_rows', $rows);
+        update_option(self::OPT_MIGRATION_DONE, 1, false);
     }
 
     private static function migrate_legacy_row(array $row): void
     {
         $title = isset($row['title']) ? sanitize_text_field((string) $row['title']) : '';
         $content = isset($row['content']) ? wp_kses_post((string) $row['content']) : '';
-        $von = isset($row['von_datum']) ? self::normalize_date((string) $row['von_datum']) : '';
-        $bis = isset($row['bis_datum']) ? self::normalize_date((string) $row['bis_datum']) : '';
-        $active = isset($row['active']) && (int) $row['active'] === 0 ? 0 : 1;
-        $thumbnail_id = isset($row['thumbnail_id']) ? (int) $row['thumbnail_id'] : 0;
+        $von = self::normalize_date((string) ($row['von_datum'] ?? ''));
+        $bis = self::normalize_date((string) ($row['bis_datum'] ?? ''));
 
         if ($title === '' || $von === '' || $bis === '') {
             return;
         }
 
-        $existing = get_posts([
-            'post_type' => self::POST_TYPE,
-            'post_status' => 'any',
-            'posts_per_page' => 1,
-            'fields' => 'ids',
-            'meta_query' => [
-                'relation' => 'AND',
-                [
-                    'key' => self::META_VON,
-                    'value' => $von,
-                    'compare' => '=',
-                ],
-                [
-                    'key' => self::META_BIS,
-                    'value' => $bis,
-                    'compare' => '=',
-                ],
-            ],
-            'title' => $title,
-        ]);
-
-        if ($existing !== []) {
-            return;
-        }
-
-        $post_id = wp_insert_post([
+        $id = wp_insert_post([
             'post_type' => self::POST_TYPE,
             'post_status' => 'publish',
             'post_title' => $title,
             'post_content' => $content,
-        ], true);
+        ]);
 
-        if (is_wp_error($post_id)) {
+        if ($id <= 0) {
             return;
         }
 
-        update_post_meta($post_id, self::META_VON, $von);
-        update_post_meta($post_id, self::META_BIS, $bis);
-        update_post_meta($post_id, self::META_ACTIVE, $active);
+        update_post_meta($id, self::META_VON, $von);
+        update_post_meta($id, self::META_BIS, $bis);
+        update_post_meta($id, self::META_ACTIVE, isset($row['active']) && (int) $row['active'] === 0 ? 0 : 1);
 
-        if ($thumbnail_id > 0) {
-            set_post_thumbnail($post_id, $thumbnail_id);
+        if (! empty($row['thumbnail_id'])) {
+            set_post_thumbnail($id, (int) $row['thumbnail_id']);
+        }
+    }
+
+    public static function single_template_override(string $template): string
+    {
+        if (! is_singular(self::POST_TYPE)) {
+            return $template;
         }
 
-        wp_update_post([
-            'ID' => $post_id,
-            'post_title' => $title,
-        ]);
+        $plugin_template = plugin_dir_path(__FILE__) . 'templates/single-urlaub_post.php';
+        return file_exists($plugin_template) ? $plugin_template : $template;
     }
 
     private static function normalize_date(string $date): string
     {
+        $date = trim($date);
         if ($date === '') {
             return '';
         }
 
-        $date = trim($date);
         $dt = date_create_immutable($date);
         if ($dt === false) {
             return '';
@@ -711,18 +566,8 @@ final class Urlaub_Post_Plugin
 
         return wp_date('d.m.Y', $timestamp);
     }
-
-    private static function plugin_version(): string
-    {
-        if (! function_exists('get_file_data')) {
-            require_once ABSPATH . 'wp-admin/includes/plugin.php';
-        }
-
-        $data = get_file_data(__FILE__, ['Version' => 'Version']);
-        return (string) ($data['Version'] ?? '1.0.1');
-    }
 }
 
-Urlaub_Post_Plugin::init();
-register_activation_hook(__FILE__, ['Urlaub_Post_Plugin', 'activate']);
-register_deactivation_hook(__FILE__, ['Urlaub_Post_Plugin', 'deactivate']);
+IGW_WP_Urlaub_Post_Plugin::init();
+register_activation_hook(__FILE__, ['IGW_WP_Urlaub_Post_Plugin', 'activate']);
+register_deactivation_hook(__FILE__, ['IGW_WP_Urlaub_Post_Plugin', 'deactivate']);
