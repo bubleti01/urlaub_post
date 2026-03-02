@@ -219,9 +219,9 @@ final class IGW_WP_Urlaub_Post_Plugin
     {
         return [
             'cb' => $columns['cb'] ?? '<input type="checkbox" />',
-            'title' => __('Titel', 'igw_wp_urlaub_post'),
             'von_datum' => __('Von', 'igw_wp_urlaub_post'),
             'bis_datum' => __('Bis', 'igw_wp_urlaub_post'),
+            'title' => __('Titel', 'igw_wp_urlaub_post'),
             'date' => $columns['date'] ?? __('Datum', 'igw_wp_urlaub_post'),
         ];
     }
@@ -410,10 +410,16 @@ final class IGW_WP_Urlaub_Post_Plugin
 
         echo '<hr /><h2>' . esc_html__('Export zu WP Plugin Öffnungszeiten', 'igw_wp_urlaub_post') . '</h2>';
         echo '<p>' . esc_html__('Schreibt alle aktiven Urlaubsposts in „Ferien (Neue)“ des Plugins igw_wp_open_zeit.', 'igw_wp_urlaub_post') . '</p>';
+        $integration_available = function_exists('igw_wp_open_zeit_upsert_ferien');
+
+        if (! $integration_available) {
+            echo '<p><em>' . esc_html__('Export-API nicht verfügbar. Bitte Plugin igw_wp_open_zeit aktivieren.', 'igw_wp_urlaub_post') . '</em></p>';
+        }
+
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="igw_wp_urlaub_post_export_ferien" />';
         wp_nonce_field('igw_wp_urlaub_post_export_ferien', 'igw_wp_urlaub_post_export_nonce');
-        submit_button(__('Ferien exportieren', 'igw_wp_urlaub_post'), 'secondary', 'submit', false);
+        submit_button(__('Ferien exportieren', 'igw_wp_urlaub_post'), 'secondary', 'submit', false, ['disabled' => ! $integration_available]);
         echo '</form></div>';
     }
 
