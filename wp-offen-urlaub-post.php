@@ -410,7 +410,7 @@ final class IGW_WP_Urlaub_Post_Plugin
 
         echo '<hr /><h2>' . esc_html__('Export zu WP Plugin Öffnungszeiten', 'igw_wp_urlaub_post') . '</h2>';
         echo '<p>' . esc_html__('Schreibt alle aktiven Urlaubsposts in „Ferien (Neue)“ des Plugins igw_wp_open_zeit.', 'igw_wp_urlaub_post') . '</p>';
-        $integration_available = function_exists('igw_wp_open_zeit_upsert_ferien');
+        $integration_available = self::is_open_zeit_available();
 
         if (! $integration_available) {
             echo '<p><em>' . esc_html__('Export-API nicht verfügbar. Bitte Plugin igw_wp_open_zeit aktivieren.', 'igw_wp_urlaub_post') . '</em></p>';
@@ -433,17 +433,87 @@ final class IGW_WP_Urlaub_Post_Plugin
 
         $rows = self::build_export_rows();
 
-        if (! function_exists('igw_wp_open_zeit_upsert_ferien')) {
-            wp_die(esc_html__('Integration nicht verfügbar: Funktion igw_wp_open_zeit_upsert_ferien() fehlt.', 'igw_wp_urlaub_post'));
-        }
-
-        igw_wp_open_zeit_upsert_ferien($rows, [
+        $ok = self::export_rows_to_open_zeit($rows, [
             'source' => 'igw_wp_urlaub_post',
             'mode' => 'replace',
         ]);
 
+        if (! $ok) {
+            wp_die(esc_html__('Integration nicht verfügbar: Keine kompatible Export-API in igw_wp_open_zeit gefunden.', 'igw_wp_urlaub_post'));
+        }
+
         wp_safe_redirect(admin_url('options-general.php?page=igw-wp-urlaub-post-settings'));
         exit;
+    }
+
+
+    private static function is_open_zeit_available(): bool
+    {
+        if (function_exists('igw_wp_open_zeit_upsert_ferien')) {
+            return true;
+        }
+
+        if (has_action('igw_wp_open_zeit_upsert_ferien') || has_filter('igw_wp_open_zeit_upsert_ferien')) {
+            return true;
+        }
+
+        if (class_exists('IGW_WP_Open_Zeit') && method_exists('IGW_WP_Open_Zeit', 'upsert_ferien')) {
+            return true;
+        }
+
+        if (class_exists('IGW_WP_Open_Zeit_Integration') && method_exists('IGW_WP_Open_Zeit_Integration', 'upsert_ferien')) {
+            return true;
+        }
+
+        if (class_exists('IGW_WP_Open_Zeit_Plugin')) {
+            $instance = null;
+            if (method_exists('IGW_WP_Open_Zeit_Plugin', 'instance')) {
+                $instance = \IGW_WP_Open_Zeit_Plugin::instance();
+            }
+            if (is_object($instance) && method_exists($instance, 'upsert_ferien')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function export_rows_to_open_zeit(array $rows, array $context): bool
+    {
+        if (function_exists('igw_wp_open_zeit_upsert_ferien')) {
+            igw_wp_open_zeit_upsert_ferien($rows, $context);
+            return true;
+        }
+
+        if (has_filter('igw_wp_open_zeit_upsert_ferien')) {
+            apply_filters('igw_wp_open_zeit_upsert_ferien', $rows, $context);
+            return true;
+        }
+
+        if (has_action('igw_wp_open_zeit_upsert_ferien')) {
+            do_action('igw_wp_open_zeit_upsert_ferien', $rows, $context);
+            return true;
+        }
+
+        if (class_exists('IGW_WP_Open_Zeit') && method_exists('IGW_WP_Open_Zeit', 'upsert_ferien')) {
+            \IGW_WP_Open_Zeit::upsert_ferien($rows, $context);
+            return true;
+        }
+
+        if (class_exists('IGW_WP_Open_Zeit_Integration') && method_exists('IGW_WP_Open_Zeit_Integration', 'upsert_ferien')) {
+            \IGW_WP_Open_Zeit_Integration::upsert_ferien($rows, $context);
+            return true;
+        }
+
+        if (class_exists('IGW_WP_Open_Zeit_Plugin') && method_exists('IGW_WP_Open_Zeit_Plugin', 'instance')) {
+            $instance = \IGW_WP_Open_Zeit_Plugin::instance();
+            if (is_object($instance) && method_exists($instance, 'upsert_ferien')) {
+                $instance->upsert_ferien($rows, $context);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function build_export_rows(): array
