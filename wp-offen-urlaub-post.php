@@ -280,6 +280,7 @@ final class IGW_WP_Urlaub_Post_Plugin
     {
         add_shortcode('igw_urlaub', [__CLASS__, 'shortcode_full']);
         add_shortcode('igw_vacation_notice', [__CLASS__, 'shortcode_compact']);
+        add_shortcode('igw_vacation_info', [__CLASS__, 'shortcode_info']);
     }
 
     public static function shortcode_full(array $atts = []): string
@@ -290,6 +291,11 @@ final class IGW_WP_Urlaub_Post_Plugin
     public static function shortcode_compact(array $atts = []): string
     {
         return self::render_notices('compact', $atts);
+    }
+
+    public static function shortcode_info(array $atts = []): string
+    {
+        return self::render_notices('info', $atts);
     }
 
     public static function register_block(): void
@@ -339,10 +345,13 @@ final class IGW_WP_Urlaub_Post_Plugin
             $html .= '<h3 class="igw-urlaub-post-item__title"><a href="' . esc_url(get_permalink($post)) . '">' . esc_html(get_the_title($post)) . '</a></h3>';
             $html .= '<p class="igw-urlaub-post-item__dates">' . $date_line . '</p>';
 
-            if ($mode === 'full') {
+            if ($mode === 'full' || $mode === 'info') {
                 if (has_post_thumbnail($post)) {
                     $html .= '<div class="igw-urlaub-post-item__image">' . get_the_post_thumbnail($post, 'medium') . '</div>';
                 }
+            }
+
+            if ($mode === 'full') {
                 $html .= '<div class="igw-urlaub-post-item__content">' . apply_filters('the_content', (string) $post->post_content) . '</div>';
             }
 
