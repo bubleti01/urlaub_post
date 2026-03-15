@@ -275,7 +275,13 @@ final class IGW_WP_Urlaub_Post_Plugin
             $data['post_title'] = $title;
         }
 
-        $base_slug = sanitize_title($title . '-vom-' . $von . '-bis-' . $bis);
+        $von_slug = self::format_date_for_slug($von);
+        $bis_slug = self::format_date_for_slug($bis);
+        if ($von_slug === '' || $bis_slug === '') {
+            return $data;
+        }
+
+        $base_slug = sanitize_title('betriebsferien-vom-' . $von_slug . '-bis-' . $bis_slug);
         $data['post_name'] = wp_unique_post_slug($base_slug, $post_id, $status, self::POST_TYPE, (int) ($postarr['post_parent'] ?? 0));
 
         return $data;
@@ -608,6 +614,22 @@ final class IGW_WP_Urlaub_Post_Plugin
         }
 
         return sprintf('Betriebsferien von %1$s bis %2$s', $von_out, $bis_out);
+    }
+
+
+    private static function format_date_for_slug(string $ymd): string
+    {
+        $normalized = self::normalize_date($ymd);
+        if ($normalized === '') {
+            return '';
+        }
+
+        $dt = date_create_immutable($normalized);
+        if ($dt === false) {
+            return '';
+        }
+
+        return $dt->format('d-m-Y');
     }
 
     private static function normalize_date(string $date): string
