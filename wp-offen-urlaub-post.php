@@ -67,6 +67,7 @@ final class IGW_WP_Urlaub_Post_Plugin
         add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_editor_assets']);
         add_action('admin_init', [__CLASS__, 'maybe_migrate_legacy_data']);
 
+        add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_frontend_styles']);
         add_filter('template_include', [__CLASS__, 'single_template_override']);
     }
 
@@ -393,22 +394,12 @@ final class IGW_WP_Urlaub_Post_Plugin
         $html = '<div class="igw-urlaub-post-list igw-urlaub-post-list--' . esc_attr($mode) . '">';
 
         foreach ($posts as $post) {
-            $von = igw_urlaub_post_format_date_de((string) get_post_meta($post->ID, self::META_VON, true));
-            $bis = igw_urlaub_post_format_date_de((string) get_post_meta($post->ID, self::META_BIS, true));
-
-            $date_line = sprintf(
-                esc_html__('vom %1$s bis %2$s', 'igw_wp_urlaub_post'),
-                esc_html($von),
-                esc_html($bis)
-            );
-
             $html .= '<article class="igw-urlaub-post-item">';
             $html .= '<h3 class="igw-urlaub-post-item__title"><a href="' . esc_url(get_permalink($post)) . '">' . esc_html(get_the_title($post)) . '</a></h3>';
-            $html .= '<p class="igw-urlaub-post-item__dates">' . $date_line . '</p>';
 
             if ($mode === 'full' || $mode === 'info') {
                 if (has_post_thumbnail($post)) {
-                    $html .= '<div class="igw-urlaub-post-item__image">' . get_the_post_thumbnail($post, 'medium') . '</div>';
+                    $html .= '<div class="igw-urlaub-post-item__image igw-urlaub-post-item__image--shortcode">' . get_the_post_thumbnail($post, 'medium') . '</div>';
                 }
             }
 
@@ -556,6 +547,38 @@ final class IGW_WP_Urlaub_Post_Plugin
         if (! empty($row['thumbnail_id'])) {
             set_post_thumbnail($id, (int) $row['thumbnail_id']);
         }
+    }
+
+
+    public static function enqueue_frontend_styles(): void
+    {
+        $css = '
+.single-urlaub_post .byline,
+.single-urlaub_post .posted-on,
+.single-urlaub_post .author,
+.single-urlaub_post .entry-meta,
+.post-type-archive-urlaub_post .byline,
+.post-type-archive-urlaub_post .posted-on,
+.post-type-archive-urlaub_post .author,
+.post-type-archive-urlaub_post .entry-meta {
+    display: none !important;
+}
+.igw-urlaub-post-item__image--shortcode img {
+    max-width: 640px;
+    width: 100%;
+    height: auto;
+    display: block;
+    margin-bottom: 20px;
+}
+.single-urlaub_post .post-thumbnail img {
+    display: block;
+    margin-bottom: 20px;
+}
+';
+
+        wp_register_style('igw-wp-urlaub-post-frontend', false, [], '1.0.3');
+        wp_enqueue_style('igw-wp-urlaub-post-frontend');
+        wp_add_inline_style('igw-wp-urlaub-post-frontend', $css);
     }
 
     public static function single_template_override(string $template): string
