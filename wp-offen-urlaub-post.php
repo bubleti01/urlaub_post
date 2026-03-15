@@ -64,6 +64,7 @@ final class IGW_WP_Urlaub_Post_Plugin
 
         add_action('admin_menu', [__CLASS__, 'register_settings_page']);
         add_action('admin_init', [__CLASS__, 'register_settings']);
+        add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_editor_assets']);
         add_action('admin_init', [__CLASS__, 'maybe_migrate_legacy_data']);
 
         add_filter('template_include', [__CLASS__, 'single_template_override']);
@@ -170,6 +171,40 @@ final class IGW_WP_Urlaub_Post_Plugin
         echo '<input type="date" id="igw_wp_urlaub_post_bis" name="igw_wp_urlaub_post_bis" value="' . esc_attr($bis) . '" style="width:100%;" /></p>';
 
         echo '<p><label><input type="checkbox" name="igw_wp_urlaub_post_active" value="1" ' . checked($active !== 0 ? 1 : 0, 1, false) . ' /> ' . esc_html__('Aktiv', 'igw_wp_urlaub_post') . '</label></p>';
+
+        echo '<p><button type="button" class="button" id="igw_wp_urlaub_post_apply_schedule">' . esc_html__('Veröffentlichungsdatum setzen', 'igw_wp_urlaub_post') . '</button></p>';
+        echo '<p><span id="igw_wp_urlaub_post_schedule_preview"></span></p>';
+        echo '<p class="description">' . esc_html__('Setzt das Veröffentlichungsdatum auf „Von - Vorlauf Tage“ um 04:30.', 'igw_wp_urlaub_post') . '</p>';
+    }
+
+
+    public static function enqueue_editor_assets(string $hook_suffix): void
+    {
+        if (! in_array($hook_suffix, ['post.php', 'post-new.php'], true)) {
+            return;
+        }
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (! $screen || $screen->post_type !== self::POST_TYPE) {
+            return;
+        }
+
+        wp_enqueue_script(
+            'igw-wp-urlaub-post-editor-schedule',
+            plugins_url('assets/editor-schedule.js', __FILE__),
+            ['jquery', 'wp-data'],
+            '1.0.3',
+            true
+        );
+
+        wp_localize_script('igw-wp-urlaub-post-editor-schedule', 'IGWUrlaubPostSchedule', [
+            'preDays' => max(0, (int) get_option(self::OPT_PRE_DAYS, 0)),
+            'time' => '04:30:00',
+            'timezone' => wp_timezone_string(),
+            'i18n' => [
+                'previewPrefix' => __('Geplante Veröffentlichung:', 'igw_wp_urlaub_post'),
+            ],
+        ]);
     }
 
     public static function save_meta_boxes(int $post_id): void
