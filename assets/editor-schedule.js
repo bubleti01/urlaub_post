@@ -112,10 +112,45 @@
     }
   }
 
+
+
+  function hideAddNewInputs() {
+    var isNew = !!(window.IGWUrlaubPostSchedule && window.IGWUrlaubPostSchedule.isNewPost);
+    if (!isNew) {
+      return;
+    }
+
+    $('#titlediv, #categorydiv, #tagsdiv-post_tag').hide();
+
+    if (window.wp && window.wp.data && window.wp.data.dispatch) {
+      try {
+        window.wp.data.dispatch('core/edit-post').removeEditorPanel('taxonomy-panel-category');
+        window.wp.data.dispatch('core/edit-post').removeEditorPanel('taxonomy-panel-post_tag');
+      } catch (e) {
+        // no-op
+      }
+    }
+
+    var css = document.createElement('style');
+    css.id = 'igw-urlaub-post-hide-add-new-ui';
+    css.textContent = [
+      '.post-type-urlaub_post.post-new-php #titlediv { display:none !important; }',
+      '.post-type-urlaub_post.post-new-php #categorydiv { display:none !important; }',
+      '.post-type-urlaub_post.post-new-php #tagsdiv-post_tag { display:none !important; }',
+      '.post-type-urlaub_post .editor-post-title { display:none !important; }'
+    ].join('\n');
+
+    if (!document.getElementById(css.id)) {
+      document.head.appendChild(css);
+    }
+  }
+
   $(function () {
     var $von = $('#igw_wp_urlaub_post_von');
     var $bis = $('#igw_wp_urlaub_post_bis');
     var $btn = $('#igw_wp_urlaub_post_apply_schedule');
+
+    hideAddNewInputs();
 
     if (!$von.length) {
       return;

@@ -201,8 +201,11 @@ final class IGW_WP_Urlaub_Post_Plugin
             'preDays' => max(0, (int) get_option(self::OPT_PRE_DAYS, 0)),
             'time' => '04:30:00',
             'timezone' => wp_timezone_string(),
+            'isNewPost' => $hook_suffix === 'post-new.php',
             'i18n' => [
                 'previewPrefix' => __('Geplante Veröffentlichung:', 'igw_wp_urlaub_post'),
+                'activeYes' => __('Aktiv', 'igw_wp_urlaub_post'),
+                'activeNo' => __('Inaktiv', 'igw_wp_urlaub_post'),
             ],
         ]);
     }
@@ -229,9 +232,14 @@ final class IGW_WP_Urlaub_Post_Plugin
         $bis = isset($_POST['igw_wp_urlaub_post_bis']) ? sanitize_text_field(wp_unslash($_POST['igw_wp_urlaub_post_bis'])) : '';
         $active = isset($_POST['igw_wp_urlaub_post_active']) ? 1 : 0;
 
-        update_post_meta($post_id, self::META_VON, self::normalize_date($von));
-        update_post_meta($post_id, self::META_BIS, self::normalize_date($bis));
+        $von_normalized = self::normalize_date($von);
+        $bis_normalized = self::normalize_date($bis);
+
+        update_post_meta($post_id, self::META_VON, $von_normalized);
+        update_post_meta($post_id, self::META_BIS, $bis_normalized);
         update_post_meta($post_id, self::META_ACTIVE, $active);
+
+        self::ensure_auto_title_and_category($post_id, $von_normalized, $bis_normalized);
     }
 
     public static function inject_slug_from_dates(array $data, array $postarr): array
@@ -243,7 +251,7 @@ final class IGW_WP_Urlaub_Post_Plugin
         $title = (string) ($data['post_title'] ?? '');
         $status = (string) ($data['post_status'] ?? '');
 
-        if ($title === '' || in_array($status, ['auto-draft', 'inherit'], true)) {
+        if (in_array($status, ['auto-draft', 'inherit'], true)) {
             return $data;
         }
 
@@ -262,6 +270,11 @@ final class IGW_WP_Urlaub_Post_Plugin
             return $data;
         }
 
+        if ($title === '') {
+            $title = self::build_auto_title($von, $bis);
+            $data['post_title'] = $title;
+        }
+
         $base_slug = sanitize_title($title . '-vom-' . $von . '-bis-' . $bis);
         $data['post_name'] = wp_unique_post_slug($base_slug, $post_id, $status, self::POST_TYPE, (int) ($postarr['post_parent'] ?? 0));
 
@@ -272,9 +285,10 @@ final class IGW_WP_Urlaub_Post_Plugin
     {
         return [
             'cb' => $columns['cb'] ?? '<input type="checkbox" />',
+            'title' => __('Titel', 'igw_wp_urlaub_post'),
             'von_datum' => __('Von', 'igw_wp_urlaub_post'),
             'bis_datum' => __('Bis', 'igw_wp_urlaub_post'),
-            'title' => __('Titel', 'igw_wp_urlaub_post'),
+            'active' => __('Aktiv', 'igw_wp_urlaub_post'),
             'date' => $columns['date'] ?? __('Datum', 'igw_wp_urlaub_post'),
         ];
     }
@@ -288,6 +302,12 @@ final class IGW_WP_Urlaub_Post_Plugin
 
         if ($column === 'bis_datum') {
             echo esc_html(self::format_date_for_display((string) get_post_meta($post_id, self::META_BIS, true)));
+            return;
+        }
+
+        if ($column === 'active') {
+            $active = (int) get_post_meta($post_id, self::META_ACTIVE, true);
+            echo esc_html($active === 1 ? __('Aktiv', 'igw_wp_urlaub_post') : __('Inaktiv', 'igw_wp_urlaub_post'));
         }
     }
 
@@ -540,6 +560,54 @@ final class IGW_WP_Urlaub_Post_Plugin
 
         $plugin_template = plugin_dir_path(__FILE__) . 'templates/single-urlaub_post.php';
         return file_exists($plugin_template) ? $plugin_template : $template;
+    }
+
+
+    private static function ensure_auto_title_and_category(int $post_id, string $von, string $bis): void
+    {
+        if ($von === '' || $bis === '') {
+            return;
+        }
+
+        $title = self::build_auto_title($von, $bis);
+
+        remove_action('save_post_' . self::POST_TYPE, [__CLASS__, 'save_meta_boxes']);
+        wp_update_post([
+            'ID' => $post_id,
+            'post_title' => $title,
+        ]);
+        add_action('save_post_' . self::POST_TYPE, [__CLASS__, 'save_meta_boxes']);
+
+        self::ensure_betriebsferien_category($post_id);
+    }
+
+    private static function ensure_betriebsferien_category(int $post_id): void
+    {
+        $term = term_exists('betriebsferien', 'category');
+        if ($term === 0 || $term === null) {
+            $term = wp_insert_term('Betriebsferien', 'category', ['slug' => 'betriebsferien']);
+        }
+
+        if (is_wp_error($term)) {
+            return;
+        }
+
+        $term_id = is_array($term) ? (int) ($term['term_id'] ?? 0) : (int) $term;
+        if ($term_id > 0) {
+            wp_set_post_terms($post_id, [$term_id], 'category', false);
+        }
+    }
+
+    private static function build_auto_title(string $von, string $bis): string
+    {
+        $von_out = igw_urlaub_post_format_date_de($von);
+        $bis_out = igw_urlaub_post_format_date_de($bis);
+
+        if ($von_out === '' || $bis_out === '') {
+            return 'Betriebsferien';
+        }
+
+        return sprintf('Betriebsferien von %1$s bis %2$s', $von_out, $bis_out);
     }
 
     private static function normalize_date(string $date): string
